@@ -1,0 +1,5 @@
+__pycache__
+/credentials.json
+/token.pickle
+/timetable_data.csv
+/events_ids.csv
