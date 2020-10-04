@@ -1,16 +1,18 @@
 import curses
-import time
-import sys
-import csv
-from collections import defaultdict
-import re
+import datetime
 import os.path
 import pickle
-import datetime
+import re
+from collections import defaultdict
 
+import scrapy
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from itemloaders.processors import TakeFirst, MapCompose
+from scrapy import signals
+from scrapy.crawler import Crawler, CrawlerProcess
+from scrapy.loader import ItemLoader
 
 # Define global variables
 COLORS = {}
@@ -29,12 +31,11 @@ DAYS_EN = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
-CSV_FILE = "timetable_data.csv"
+ITEMS = []
 
 
 class Subject:
     def __init__(self, classroom, day, prof, subject, time):
-        time = time[1:-1].split(", ")
         self.classroom = classroom
         self.day = day
         self.prof = prof
@@ -51,26 +52,13 @@ class Subject:
         return f"{self.subject}, {self.classroom}, {self.prof}, {self.start_time} - {self.end_time}"
 
 
-def read_csv_file():
+def init_subjects():
     """
-    Reads the csv file and creates an array of Subject objects
+    Creates Subject objects from the scraped data
     """
     subjects = []
-
-    try:
-        with open(CSV_FILE, encoding="utf8") as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter=",")
-            line_count = 0
-            for row in csv_reader:
-                if line_count == 0:
-                    line_count += 1
-                else:
-                    subjects.append(Subject(row[0], row[1], row[2], row[3], row[4]))
-                    line_count += 1
-    except (FileNotFoundError):
-        print("CSV file not found.")
-        print("Make sure that you run: scrapy crawl -o timetable_data.csv -a url=<URL TO TIMETABLE>")
-        sys.exit(1)
+    for e in ITEMS:
+        subjects.append(Subject(e["classroom"], e["day"], e["prof"], e["subject"], e["time"]))
 
     return subjects
 
@@ -408,7 +396,7 @@ def add_to_calendar(lectures):
 
 def gui(stdscr):
     # Reads the scv file
-    subjects = read_csv_file()
+    subjects = init_subjects()
 
     # Init the color pairs
     curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_RED)
@@ -439,5 +427,93 @@ def gui(stdscr):
         add_to_calendar(selected_lectures)
 
 
+"""
+
+    Scrapy
+
+"""
+
+
+class TimetableSpider(scrapy.Spider):
+    name = "timetable"
+
+    def __init__(self, *args, **kwargs):
+        super(TimetableSpider, self).__init__(*args, **kwargs)
+        self.start_urls = ["https://urnik.fri.uni-lj.si/timetable/fri-2020_2021-zimski-1-10/allocations?group=43866"]
+
+    def start_requests(self):
+        yield scrapy.Request(self.start_urls[0], callback=self.parse)
+
+    def parse(self, response):
+        days = response.css(".grid-day-column")
+        for day in days:
+            subjects = day.css(".grid-entry")
+            for subject in subjects:
+                text = subject.css(".entry-hover").get()
+                elements = []
+                for e in text.split("\n"):
+                    e = e.strip()
+                    e = e.replace("<br>", ",")
+                    elements.append(e)
+                time = elements[1].split(" ")
+                elements = elements[1: 3] + elements[4:]
+
+                elements[2] = subject.css(".link-subject::text").get()
+
+                subject_item = ItemLoader(item=SubjectItem(), selector=subject)
+                subject_item.add_value("day", time[0])
+                subject_item.add_value("time", (time[1][:time[1].index(":")], time[3][:time[3].index(":")]))
+                subject_item.add_value("classroom", elements[1])
+                subject_item.add_value("subject", elements[2])
+                subject_item.add_value("prof", elements[3])
+
+                yield subject_item.load_item()
+
+
+def remove_comma(value):
+    return " ".join(value).replace(",", "")
+
+
+def edit_profs(value):
+    elements = value.split(",")
+    value = ""
+    for i, e in enumerate(elements):
+        if i % 2 == 0:
+            value += e
+        else:
+            value += e + ", "
+    return re.sub(r",*\s$", "", value)
+
+
+class SubjectItem(scrapy.Item):
+    day = scrapy.Field(
+        output_processor=TakeFirst()
+    )
+    time = scrapy.Field(
+        input_processor=lambda x: map(lambda y: int(y), x)
+    )
+    classroom = scrapy.Field(
+        output_processor=TakeFirst()
+    )
+    subject = scrapy.Field(
+        output_processor=TakeFirst()
+    )
+    prof = scrapy.Field(
+        input_processor=MapCompose(edit_profs),
+        output_processor=TakeFirst()
+    )
+
+
+def collect_items(item, response, spider):
+    ITEMS.append(item)
+
+
 if __name__ == "__main__":
+    crawler = Crawler(TimetableSpider)
+    crawler.signals.connect(collect_items, signals.item_scraped)
+
+    process = CrawlerProcess()
+    process.crawl(crawler)
+    process.start()
+
     curses.wrapper(gui)

@@ -3,3 +3,4 @@ __pycache__
 /token.pickle
 /timetable_data.csv
 /events_ids.csv
+.idea
