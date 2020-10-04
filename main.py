@@ -3,6 +3,7 @@ import datetime
 import os.path
 import pickle
 import re
+import sys
 from collections import defaultdict
 
 import scrapy
@@ -32,6 +33,8 @@ DAYS_EN = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 ITEMS = []
+
+URL = []
 
 
 class Subject:
@@ -64,7 +67,7 @@ def init_subjects():
 
 
 def update_pad_position(key, pad_pos, current_selected_row, pad_rows):
-    global PAD_DISPLAY_HEIGHT
+    PAD_DISPLAY_HEIGHT
     """
     Updates pad position, requires the key pressed (UP, DOWN), the current pad position, current selected (highlighted)
      row, the # of rows and columns in the pad. Returns the new pad position and the new currently selected row.
@@ -87,7 +90,6 @@ def render_nav_subject_selection(stdscr):
     """
     Render the "nav" elements in the subject selection section
     """
-    global COLORS, PAD_DISPLAY_HEIGHT, PAD_WIDTH
 
     stdscr.attron(curses.color_pair(COLORS["nav"]))
     stdscr.addstr(PAD_DISPLAY_HEIGHT + 1, 0,
@@ -101,7 +103,6 @@ def render_subject_selection_section(pad, unique_subjects, current_selected_row,
     """
     Render the subject in the selection section
     """
-    global PAD_WIDTH, PAD_DISPLAY_HEIGHT, PAD_WIDTH
     for i, e in enumerate(unique_subjects):
         out = ""
         if e.is_selected:
@@ -122,7 +123,10 @@ def select_subjects(stdscr, subjects):
     """
     Gets all the subjects and displays them so the user can select only the subject he is interested in.
     """
-    global COLORS, PAD_DISPLAY_HEIGHT, PAD_WIDTH
+
+    global PAD_DISPLAY_HEIGHT
+    global PAD_WIDTH
+
     stdscr.refresh()
 
     # Filter out unique subject names
@@ -182,7 +186,6 @@ def select_subjects(stdscr, subjects):
 
 
 def render_lecture_selection_section(pad, subjects_sorted_by_days, current_selected_row, pad_pos, already_selected):
-    global DAYS_EN, PAD_DISPLAY_HEIGHT, PAD_WIDTH, COLORS
     idx = 0
     for i in range(5):
         if i in subjects_sorted_by_days.keys():
@@ -220,7 +223,6 @@ def render_nav_lecture_selection(stdscr):
     """
     Render the "nav" elements in the subject time section
     """
-    global COLORS, PAD_DISPLAY_HEIGHT, PAD_WIDTH
 
     stdscr.attron(curses.color_pair(COLORS["nav"]))
     stdscr.addstr(PAD_DISPLAY_HEIGHT + 1, 0,
@@ -230,7 +232,7 @@ def render_nav_lecture_selection(stdscr):
 
 
 def select_lectures(stdscr, selected_subjects, subjects):
-    global DAYS, PAD_DISPLAY_HEIGHT, PAD_WIDTH
+    global PAD_WIDTH
 
     # Get all lectures of the same subject
     selected_subjects_names = {e.subject for e in selected_subjects}
@@ -439,7 +441,7 @@ class TimetableSpider(scrapy.Spider):
 
     def __init__(self, *args, **kwargs):
         super(TimetableSpider, self).__init__(*args, **kwargs)
-        self.start_urls = ["https://urnik.fri.uni-lj.si/timetable/fri-2020_2021-zimski-1-10/allocations?group=43866"]
+        self.start_urls = URL
 
     def start_requests(self):
         yield scrapy.Request(self.start_urls[0], callback=self.parse)
@@ -509,11 +511,17 @@ def collect_items(item, response, spider):
 
 
 if __name__ == "__main__":
-    crawler = Crawler(TimetableSpider)
-    crawler.signals.connect(collect_items, signals.item_scraped)
 
-    process = CrawlerProcess()
-    process.crawl(crawler)
-    process.start()
+    if len(sys.argv) > 1 and re.search(r"^https:\/\/urnik\.fri\.uni-lj\.si\/timetable\/.*", sys.argv[1]) is not None:
+        URL.append(sys.argv[1])
 
-    curses.wrapper(gui)
+        crawler = Crawler(TimetableSpider)
+        crawler.signals.connect(collect_items, signals.item_scraped)
+
+        process = CrawlerProcess()
+        process.crawl(crawler)
+        process.start()
+
+        curses.wrapper(gui)
+    else:
+        print("Invalid URL")
