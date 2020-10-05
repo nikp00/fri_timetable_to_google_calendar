@@ -25,7 +25,7 @@ You must also provide the Google Auth data.
 5. Then click _**DOWNLOAD CLIENT CONFIGURATION**_
 6. Save the .json file to the _**fri_timetable_to_google_calendar**_
 
-## 2. Run the Run the "GUI" (TUI - text-based user interfaces)
+## 2. Run the "GUI" (TUI - text-based user interfaces)
 ``python main <URL TO TIMETABLE>``  or  ``python3 main.py <URL TO TIMETABLE``
 1. First you select the subjects that you want to add to your calendar.
 ![First screen](/img/gui_2.png)
