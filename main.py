@@ -10,6 +10,8 @@ import scrapy
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+
+
 from itemloaders.processors import TakeFirst, MapCompose
 from scrapy import signals
 from scrapy.crawler import Crawler, CrawlerProcess
@@ -330,7 +332,7 @@ def build_service():
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
 
-    service = build('calendar', 'v3', credentials=creds)
+    service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
 
     return service
 
